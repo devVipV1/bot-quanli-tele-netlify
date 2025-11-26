@@ -2,25 +2,20 @@ import TelegramBot from "node-telegram-bot-api";
 
 let bot;
 
-// RAM DATABASE
-let admins = {};     // admins[groupId] = [userId]
-let warns = {};      // warns[groupId][userId] = number
-let settings = {};   // settings[group] = { camlink, camanh, camfile, time }
+// RAM DATA
+let admins = {};
+let warns = {};
+let settings = {};
 
-// FORMAT MESSAGE
 function fancy(text) {
   return `<b>✨ QUẢN LÍ NHÓM TELEGRAM ✨</b>\n\n${text}\n\n<i>⚡ Bot by Netlify</i>`;
 }
 
-// CHECK ADMIN
 function isAdmin(group, user) {
-  // ADMIN cố định từ ENV
   if (String(user) === String(process.env.MAIN_ADMIN)) return true;
-  // ADMIN động
   return admins[group]?.includes(user);
 }
 
-// CẢNH CÁO
 async function warning(msg, user) {
   const group = msg.chat.id;
 
@@ -42,25 +37,26 @@ async function warning(msg, user) {
 
     await msg.bot.sendMessage(
       group,
-      fancy(`⚠️ Cảnh cáo ${count}/4!\n⏳ Cấm chat trong ${duration / 60} phút.`),
+      fancy(`⚠️ Cảnh cáo ${count}/4!\n⏳ Cấm chat ${duration / 60} phút.`),
       { parse_mode: "HTML" }
     );
   } else {
     await msg.bot.kickChatMember(group, user);
     await msg.bot.sendMessage(
       group,
-      fancy(`🚫 Người dùng đã bị kick khỏi nhóm sau 4 lần vi phạm!`),
+      fancy(`🚫 Đã kick khỏi nhóm sau 4 lần vi phạm!`),
       { parse_mode: "HTML" }
     );
   }
 }
 
-export default async (req, res) => {
+export default async (req) => {
 
+  // KHỞI TẠO BOT 1 LẦN
   if (!bot) {
     bot = new TelegramBot(process.env.BOT_TOKEN, { webHook: false });
 
-    // BOT ĐƯỢC THÊM → NGƯỜI THÊM TRỞ THÀNH ADMIN
+    // BOT ĐƯỢC ADD VÀO NHÓM → NGƯỜI ADD TRỞ THÀNH ADMIN
     bot.on("new_chat_members", (msg) => {
       const group = msg.chat.id;
 
@@ -72,24 +68,24 @@ export default async (req, res) => {
 
           bot.sendMessage(
             group,
-            fancy(`👑 <b>${msg.from.first_name}</b> đã trở thành ADMIN chính khi thêm bot!`),
+            fancy(`👑 <b>${msg.from.first_name}</b> đã trở thành ADMIN chính!`),
             { parse_mode: "HTML" }
           );
         }
       });
     });
 
-    // NHẬN MESSAGE
+    // MESSAGE HANDLER
     bot.on("message", async (msg) => {
       if (!msg.chat || msg.chat.type === "private") return;
 
-      msg.bot = bot;   // attach bot object
+      msg.bot = bot;
 
       const group = msg.chat.id;
       const user = msg.from.id;
 
       if (!settings[group]) {
-        settings[group] = { camlink: false, camanh: false, camfile: false, time: 0 };
+        settings[group] = { camlink: false, camanh: false, camfile: false };
       }
 
       // CHẶN LINK
@@ -108,111 +104,66 @@ export default async (req, res) => {
       }
     });
 
-    // /help
-    bot.onText(/\/help/, msg => {
+    // HELP
+    bot.onText(/\/help/, (msg) => {
       bot.sendMessage(
         msg.chat.id,
         fancy(`
-<b>📌 LỆNH USER</b>
-• /help – Hiển thị lệnh
-• /idnhom – Lấy ID nhóm
-• /iduser – Lấy ID người (reply hoặc username)
+<b>LỆNH USER</b>
+/help
+/idnhom
+/iduser
 
-<b>📌 LỆNH ADMIN</b>
-• /kick @user hoặc id  
-• /addadmin @user hoặc id  
-• /kickadmin @user hoặc id  
-• /time <s> – đặt time spam  
-• /camlink – cấm link  
-• /golink – mở link  
-• /camanh – cấm ảnh  
-• /goanh – mở ảnh  
-• /camfile – cấm file  
-• /gofile – mở file  
+<b>LỆNH ADMIN</b>
+/kick id  
+/addadmin id
+/kickadmin id
+/time giây
+/camlink /golink
+/camanh /goanh
+/camfile /gofile
         `),
         { parse_mode: "HTML" }
       );
     });
 
-    // /kick
+    // KICK
     bot.onText(/\/kick (.+)/, async (msg, match) => {
-      const group = msg.chat.id;
-
-      if (!isAdmin(group, msg.from.id))
-        return bot.sendMessage(group, "❌ Bạn không phải admin");
+      if (!isAdmin(msg.chat.id, msg.from.id)) return;
 
       let id = match[1].replace("@", "");
-
       try {
-        await bot.kickChatMember(group, id);
-        bot.sendMessage(group, "✅ Đã kick thành công!");
+        await bot.kickChatMember(msg.chat.id, id);
+        bot.sendMessage(msg.chat.id, "✅ Đã kick!");
       } catch {
-        bot.sendMessage(group, "❌ Kick thất bại!");
+        bot.sendMessage(msg.chat.id, "❌ Kick thất bại");
       }
     });
 
-    // /addadmin
+    // ADD ADMIN
     bot.onText(/\/addadmin (.+)/, (msg, match) => {
+      if (!isAdmin(msg.chat.id, msg.from.id)) return;
       const group = msg.chat.id;
 
-      if (!isAdmin(group, msg.from.id))
-        return bot.sendMessage(group, "❌ Bạn không phải admin");
-
       if (!admins[group]) admins[group] = [];
-
       const id = Number(match[1].replace("@", ""));
       if (!admins[group].includes(id)) admins[group].push(id);
 
-      bot.sendMessage(group, "👑 Đã thêm admin!");
+      bot.sendMessage(group, "👑 Đã thêm admin");
     });
 
-    // /kickadmin
+    // KICK ADMIN
     bot.onText(/\/kickadmin (.+)/, (msg, match) => {
+      if (!isAdmin(msg.chat.id, msg.from.id)) return;
       const group = msg.chat.id;
-
-      if (!isAdmin(group, msg.from.id))
-        return bot.sendMessage(group, "❌ Bạn không phải admin");
 
       const id = Number(match[1].replace("@", ""));
       admins[group] = admins[group]?.filter(u => u !== id);
 
-      bot.sendMessage(group, "🗑️ Đã xoá admin!");
+      bot.sendMessage(group, "🗑️ Đã xoá admin");
     });
 
-    // /time
-    bot.onText(/\/time (.+)/, (msg, match) => {
-      const group = msg.chat.id;
-
-      if (!isAdmin(group, msg.from.id)) return;
-
-      settings[group].time = Number(match[1]);
-      bot.sendMessage(group, `⏳ Time spam set: ${match[1]} giây`);
-    });
-
-    // TOGGLE CAM/G0 LINK/ẢNH/FILE
-    const toggles = {
-      camlink: "🚫 Đã cấm gửi link!",
-      golink: "✅ Cho phép gửi link!",
-      camanh: "🚫 Đã cấm gửi ảnh!",
-      goanh: "📸 Cho phép gửi ảnh!",
-      camfile: "🚫 Đã cấm gửi file!",
-      gofile: "📂 Cho phép gửi file!",
-    };
-
-    for (let cmd in toggles) {
-      bot.onText(new RegExp(`/${cmd}`), msg => {
-        const group = msg.chat.id;
-
-        if (!isAdmin(group, msg.from.id)) return;
-
-        const key = cmd.replace("cam", "").replace("go", "");
-        settings[group][key] = cmd.startsWith("cam");
-
-        bot.sendMessage(group, toggles[cmd]);
-      });
-    }
-
-    // /idnhom
+    // ID NHÓM
     bot.onText(/\/idnhom/, msg => {
       bot.sendMessage(
         msg.chat.id,
@@ -221,8 +172,8 @@ export default async (req, res) => {
       );
     });
 
-    // /iduser
-    bot.onText(/\/iduser/, msg => {
+    // ID USER
+    bot.onText(/\/iduser/, (msg) => {
       let id =
         msg.reply_to_message?.from.id ||
         msg.text.split(" ")[1]?.replace("@", "");
@@ -235,19 +186,28 @@ export default async (req, res) => {
     });
   }
 
-  // FIX: Netlify gửi request rỗng → tránh crash
-  try {
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(200).json({ ok: true, skip: "empty-body" });
-    }
+  // FIX QUAN TRỌNG: NETLIFY GỬI REQUEST TRỐNG
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, skip: "empty-body" })
+    };
+  }
 
-    // Nhận update Telegram
+  try {
     await bot.processUpdate(req.body);
 
-    res.status(200).json({ ok: true });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true })
+    };
 
   } catch (err) {
-    console.error("Function error:", err);
-    res.status(200).json({ ok: true, error: err.message });
+    console.error("ERROR:", err);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, error: err.message })
+    };
   }
 };
