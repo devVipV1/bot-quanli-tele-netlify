@@ -14,10 +14,9 @@ function fancy(text) {
 
 // CHECK ADMIN
 function isAdmin(group, user) {
-  // ADMIN cố định từ ENV (không bao giờ mất)
+  // ADMIN cố định từ ENV
   if (String(user) === String(process.env.MAIN_ADMIN)) return true;
-
-  // ADMIN động trong danh sách
+  // ADMIN động
   return admins[group]?.includes(user);
 }
 
@@ -61,7 +60,7 @@ export default async (req, res) => {
   if (!bot) {
     bot = new TelegramBot(process.env.BOT_TOKEN, { webHook: false });
 
-    // BOT ĐƯỢC THÊM VÀO NHÓM → GÁN NGƯỜI THÊM LÀ ADMIN
+    // BOT ĐƯỢC THÊM → NGƯỜI THÊM TRỞ THÀNH ADMIN
     bot.on("new_chat_members", (msg) => {
       const group = msg.chat.id;
 
@@ -85,6 +84,7 @@ export default async (req, res) => {
       if (!msg.chat || msg.chat.type === "private") return;
 
       msg.bot = bot;   // attach bot object
+
       const group = msg.chat.id;
       const user = msg.from.id;
 
@@ -235,8 +235,19 @@ export default async (req, res) => {
     });
   }
 
-  // Nhận update Telegram
-  await bot.processUpdate(req.body);
+  // FIX: Netlify gửi request rỗng → tránh crash
+  try {
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(200).json({ ok: true, skip: "empty-body" });
+    }
 
-  res.status(200).json({ ok: true });
+    // Nhận update Telegram
+    await bot.processUpdate(req.body);
+
+    res.status(200).json({ ok: true });
+
+  } catch (err) {
+    console.error("Function error:", err);
+    res.status(200).json({ ok: true, error: err.message });
+  }
 };
