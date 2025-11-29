@@ -1,25 +1,24 @@
-// ===============================
-// HACKER OMEGA MODE – PART 1/3
-// ===============================
+// ==========================================
+// HACKER OMEGA MODE — PART 1/4
+// ==========================================
 
 import TelegramBot from "node-telegram-bot-api";
 
 let bot;
 
-// TEMP RAM STORAGE
+// Temporary RAM database (serverless-safe)
 let admins = {};
 let warns = {};
 let settings = {};
 let msgSpeed = {};
-let shadowPattern = {};
 let securityLog = [];
 let ghostMode = false;
 
 const MAIN_ADMIN = Number(process.env.MAIN_ADMIN);
 
-// ===============================
-// TIME UTILITY
-// ===============================
+// ==========================================
+// TIME STAMP
+// ==========================================
 function timeStamp() {
   const d = new Date();
   return `[ ${String(d.getHours()).padStart(2, "0")}:${String(
@@ -27,9 +26,23 @@ function timeStamp() {
   ).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")} ]`;
 }
 
-// ===============================
+// ==========================================
+// FIX HTML — ESCAPE "<" & ">"
+//
+// This prevents Telegram from crashing when
+// text contains: <id>, <user>, <123>
+// ==========================================
+function esc(s) {
+  if (!s) return "";
+  return s
+    .toString()
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ==========================================
 // MATRIX ASCII EFFECT
-// ===============================
+// ==========================================
 const matrixEffect = `
 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
@@ -38,9 +51,33 @@ const matrixEffect = `
 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 `;
 
-// ===============================
+// ==========================================
+// TERMINAL UI (auto escape)
+// ==========================================
+const terminalUI = (txt) =>
+`<pre>
+[ SYSTEM · OMEGA MATRIX ] ${timeStamp()}
+--------------------------------------------------
+${esc(txt)}
+--------------------------------------------------
+BOT STATUS: ACTIVE
+</pre>`;
+
+// ==========================================
+// RED ALERT UI (auto escape)
+// ==========================================
+const redAlertUI = (txt) =>
+`<pre>
+███████████████  RED ALERT MODE  ███████████████
+${esc(txt)}
+
+${matrixEffect}
+██ SYSTEM: THREAT ISOLATED ██
+</pre>`;
+
+// ==========================================
 // CYBER AVATAR GENERATOR
-// ===============================
+// ==========================================
 function cyberAvatar() {
   const list = [
     "(•_•)",
@@ -54,61 +91,34 @@ function cyberAvatar() {
   return list[Math.floor(Math.random() * list.length)];
 }
 
-// ===============================
-// TERMINAL UI
-// ===============================
-const terminalUI = (txt) =>
-`<pre>
-[ SYSTEM · OMEGA MATRIX ] ${timeStamp()}
---------------------------------------------------
-${txt}
---------------------------------------------------
-BOT STATUS: ACTIVE
-</pre>`;
-
-// ===============================
-// RED ALERT FIREWALL UI
-// ===============================
-const redAlertUI = (txt) =>
-`<pre>
-███████████████████████████████████████
-█░███░██░ RED · ALERT · MODE ░███░██░█
-███████████████████████████████████████
-${txt}
-
-${matrixEffect}
-██ SYSTEM: THREAT ISOLATED ██
-</pre>`;
-
-// ===============================
-// ADMIN CHECKER
-// ===============================
+// ==========================================
+// IS ADMIN CHECK
+// ==========================================
 function isAdmin(group, user) {
   if (user === MAIN_ADMIN) return true;
   return admins[group]?.includes(user) || false;
 }
 
-// ===============================
-// LOGGING SYSTEM
-// ===============================
+// ==========================================
+// SECURITY LOGGER
+// ==========================================
 function logEvent(data) {
   const entry = { time: timeStamp(), ...data };
   securityLog.push(entry);
 }
+// ==========================================
+// HACKER OMEGA MODE — PART 2/4
+// ==========================================
 
-// ===============================
-// MAIN HANDLER (Netlify Function)
-// ===============================
 export const handler = async (event) => {
   try {
     if (!bot) {
       bot = new TelegramBot(process.env.BOT_TOKEN, { webHook: true });
-
       console.log("BOT OMEGA MODE INITIALIZED");
 
-      // ====================================
-      // AUTO-ADMIN ON BOT ADD TO GROUP
-      // ====================================
+      // ======================================================
+      // AUTO ADMIN WHEN BOT IS ADDED TO GROUP
+      // ======================================================
       bot.on("new_chat_members", (msg) => {
         const group = msg.chat.id;
 
@@ -132,17 +142,18 @@ export const handler = async (event) => {
           }
         });
       });
-// ===============================
-// MESSAGE HANDLER (MAIN ENGINE)
-// ===============================
+
+      // ======================================================
+      // MESSAGE HANDLER (MAIN ENGINE)
+      // ======================================================
       bot.on("message", async (msg) => {
         const user = msg.from.id;
         const chat = msg.chat.id;
         const type = msg.chat.type;
 
-        // ======================================================
-        // 1. PRIVATE CHAT PROTECTION (trừ MAIN_ADMIN)
-        // ======================================================
+        // -----------------------------------------------
+        // PRIVATE CHAT RESTRICTION (except MAIN_ADMIN)
+        // -----------------------------------------------
         if (type === "private" && user !== MAIN_ADMIN) {
           return bot.sendMessage(
             user,
@@ -151,17 +162,17 @@ export const handler = async (event) => {
           );
         }
 
-        // ======================================================
-        // 2. GHOST MODE (ẩn bot khỏi tất cả người trừ MAIN_ADMIN)
-        // ======================================================
+        // -----------------------------------------------
+        // GHOST MODE — bot becomes INVISIBLE
+        // -----------------------------------------------
         if (ghostMode && user !== MAIN_ADMIN) {
           logEvent({ event: "GHOST_CAPTURE", user, group: chat });
-          return; // không trả lời gì
+          return; // do NOT respond
         }
 
-        // ======================================================
-        // 3. GROUP PROTECTION SYSTEM
-        // ======================================================
+        // -----------------------------------------------
+        // GROUP PROTECTION ACTIVE
+        // -----------------------------------------------
         if (type !== "private") {
           if (!settings[chat]) {
             settings[chat] = {
@@ -171,9 +182,9 @@ export const handler = async (event) => {
             };
           }
 
-          // -----------------------------------------------
-          // 3.1 SPEED SPAM DETECTION
-          // -----------------------------------------------
+          // ================================
+          // SPEED SPAM DETECTOR
+          // ================================
           if (!msgSpeed[user]) msgSpeed[user] = { count: 0, last: 0 };
           const now = Date.now();
 
@@ -188,20 +199,16 @@ export const handler = async (event) => {
             return warnSystem(msg, user, chat, "SPEED_SPAM");
           }
 
-          // -----------------------------------------------
-          // 3.2 PATTERN SPAM DETECT (aaaaaaa, !!!!!, etc)
-          // -----------------------------------------------
-          if (
-            msg.text &&
-            /(.)\1{6,}/.test(msg.text) &&
-            !isAdmin(chat, user)
-          ) {
+          // ================================
+          // PATTERN SPAM DETECTOR (aaaaaa, !!!!!)
+          // ================================
+          if (msg.text && /(.)\1{6,}/.test(msg.text) && !isAdmin(chat, user)) {
             return warnSystem(msg, user, chat, "PATTERN_SPAM");
           }
 
-          // -----------------------------------------------
-          // 3.3 SHADOW LINK DETECTOR (hxxp, h*t*t*p)
-          // -----------------------------------------------
+          // ================================
+          // SHADOW LINK DETECTOR (hxxp, h*t*t*p)
+          // ================================
           if (
             msg.text &&
             /(hxxp|h\.t\.t\.p|h\*ttp|h_t_t_p)/i.test(msg.text) &&
@@ -210,9 +217,9 @@ export const handler = async (event) => {
             return warnSystem(msg, user, chat, "SHADOW_LINK");
           }
 
-          // -----------------------------------------------
-          // 3.4 BLOCK NORMAL LINK
-          // -----------------------------------------------
+          // ================================
+          // NORMAL LINK BLOCKER
+          // ================================
           if (
             settings[chat].camlink &&
             msg.text &&
@@ -223,16 +230,16 @@ export const handler = async (event) => {
             }
           }
 
-          // -----------------------------------------------
-          // 3.5 BLOCK IMAGES
-          // -----------------------------------------------
+          // ================================
+          // BLOCK IMAGES
+          // ================================
           if (settings[chat].camanh && msg.photo && !isAdmin(chat, user)) {
             return warnSystem(msg, user, chat, "IMAGE_BLOCK");
           }
 
-          // -----------------------------------------------
-          // 3.6 BLOCK FILES
-          // -----------------------------------------------
+          // ================================
+          // BLOCK FILES
+          // ================================
           if (settings[chat].camfile && msg.document && !isAdmin(chat, user)) {
             return warnSystem(msg, user, chat, "FILE_BLOCK");
           }
@@ -240,7 +247,7 @@ export const handler = async (event) => {
       });
 
       // ======================================================
-      // THREAT RESPONSE SYSTEM (WARNING ENGINE)
+      // THREAT & WARNING SYSTEM
       // ======================================================
       async function warnSystem(msg, user, group, reason) {
         if (!warns[group]) warns[group] = {};
@@ -263,22 +270,26 @@ export const handler = async (event) => {
           3: 120 * 60,
         };
 
-        // CRITICAL = level 4
+        // ================================
+        // CRITICAL THREAT (LEVEL 4)
+        // ================================
         if (level >= 4) {
           await bot.kickChatMember(group, user);
 
           return bot.sendMessage(
             group,
             redAlertUI(`
-> CRITICAL THREAT NEUTRALIZED
-> USER: ${user}
-> CLASS: OMEGA LVL 4
+CRITICAL THREAT NEUTRALIZED
+USER: ${user}
+CLASS: OMEGA LVL 4
 ${matrixEffect}`),
             { parse_mode: "HTML" }
           );
         }
 
-        // TEMP BAN
+        // ================================
+        // TEMP BAN — MUTED
+        // ================================
         await bot.restrictChatMember(group, user, {
           permissions: { can_send_messages: false },
           until_date: Math.floor(Date.now() / 1000) + durations[level],
@@ -287,45 +298,45 @@ ${matrixEffect}`),
         bot.sendMessage(
           group,
           redAlertUI(`
-> THREAT LEVEL: ${level}/4
-> REASON: ${reason}
-> USER: ${user}
-> TEMP BAN: ${durations[level] / 60} MINUTES
-> AVATAR: ${cyberAvatar()}
+THREAT LEVEL: ${level}/4
+REASON: ${reason}
+USER: ${user}
+TEMP BAN: ${durations[level] / 60} MINUTES
+AVATAR: ${cyberAvatar()}
 `),
           { parse_mode: "HTML" }
         );
       }
 
-// ======================================================
-// HELP COMMAND
-// ======================================================
+      // ======================================================
+      // HELP MENU
+      // ======================================================
       bot.onText(/\/help/, (msg) => {
         bot.sendMessage(
           msg.chat.id,
           terminalUI(`
-> AVAILABLE COMMANDS
+AVAILABLE COMMANDS:
 /help
 /idnhom
 /iduser (reply)
 
-/ADMIN PANEL
+/ADMIN:
 /addadmin <id>
 /kickadmin <id>
 /kick <id|reply>
 
-/UNBAN
+/UNBAN:
 /unmutes <id|reply>
 
-/SECURITY
+/SECURITY:
 /camlink /golink
 /camanh  /goanh
 /camfile /gofile
 
-/ANTISPAM
+/ANTISPAM:
 /time <seconds>
 
-/SYSTEM
+/SYSTEM:
 /log
 /system
 /ghost on|off
@@ -333,8 +344,12 @@ ${matrixEffect}`),
           { parse_mode: "HTML" }
         );
       });
+// ==========================================
+// HACKER OMEGA MODE — PART 3/4
+// ==========================================
+
 // ======================================================
-// UNMUTES COMMAND (gỡ cấm ngay lập tức)
+// UNMUTES (REMOVE MUTE IMMEDIATELY)
 // ======================================================
       bot.onText(/\/unmutes(?: (.+))?/, async (msg, match) => {
         const group = msg.chat.id;
@@ -349,9 +364,11 @@ ${matrixEffect}`),
         }
 
         if (!id) {
-          return bot.sendMessage(group, terminalUI("> ERROR: NO TARGET FOUND"), {
-            parse_mode: "HTML",
-          });
+          return bot.sendMessage(
+            group,
+            terminalUI("> ERROR: NO TARGET FOUND"),
+            { parse_mode: "HTML" }
+          );
         }
 
         try {
@@ -367,20 +384,20 @@ ${matrixEffect}`),
 
           bot.sendMessage(
             group,
-            terminalUI(`> UNMUTED: ${id}\n> STATUS: SUCCESS`),
+            terminalUI(`> USER UNMUTED: ${id}\n> STATUS: SUCCESS`),
             { parse_mode: "HTML" }
           );
         } catch {
           bot.sendMessage(
             group,
-            terminalUI(`> UNMUTED: ${id}\n> STATUS: FAILED`),
+            terminalUI(`> USER UNMUTED: ${id}\n> STATUS: FAILED`),
             { parse_mode: "HTML" }
           );
         }
       });
 
 // ======================================================
-// KICK COMMAND
+// KICK USER
 // ======================================================
       bot.onText(/\/kick (.+)/, async (msg, match) => {
         const group = msg.chat.id;
@@ -409,13 +426,14 @@ ${matrixEffect}`),
       });
 
 // ======================================================
-// ADD ADMIN COMMAND
+// ADD ADMIN
 // ======================================================
       bot.onText(/\/addadmin (.+)/, (msg, match) => {
         const group = msg.chat.id;
         if (!isAdmin(group, msg.from.id)) return;
 
         const id = Number(match[1].replace("@", ""));
+
         if (!admins[group]) admins[group] = [];
         if (!admins[group].includes(id)) admins[group].push(id);
 
@@ -432,7 +450,7 @@ ${matrixEffect}`),
       });
 
 // ======================================================
-// KICK ADMIN COMMAND
+// REMOVE ADMIN
 // ======================================================
       bot.onText(/\/kickadmin (.+)/, (msg, match) => {
         const group = msg.chat.id;
@@ -465,9 +483,119 @@ ${matrixEffect}`),
 
       bot.onText(/\/iduser/, (msg) => {
         const id = msg.reply_to_message?.from.id;
+
         bot.sendMessage(
           msg.chat.id,
           terminalUI(`> USER ID: ${id}`),
+          { parse_mode: "HTML" }
+        );
+      });
+
+// ======================================================
+// SECURITY TOGGLES
+// ======================================================
+      bot.onText(/\/camlink/, (msg) => {
+        const group = msg.chat.id;
+        if (!isAdmin(group, msg.from.id)) return;
+        settings[group].camlink = true;
+
+        bot.sendMessage(
+          group,
+          terminalUI("> LINK BLOCKING: ENABLED"),
+          { parse_mode: "HTML" }
+        );
+      });
+
+      bot.onText(/\/golink/, (msg) => {
+        const group = msg.chat.id;
+        if (!isAdmin(group, msg.from.id)) return;
+        settings[group].camlink = false;
+
+        bot.sendMessage(
+          group,
+          terminalUI("> LINK BLOCKING: DISABLED"),
+          { parse_mode: "HTML" }
+        );
+      });
+
+      bot.onText(/\/camanh/, (msg) => {
+        const group = msg.chat.id;
+        if (!isAdmin(group, msg.from.id)) return;
+        settings[group].camanh = true;
+
+        bot.sendMessage(
+          group,
+          terminalUI("> IMAGE BLOCKING: ENABLED"),
+          { parse_mode: "HTML" }
+        );
+      });
+
+      bot.onText(/\/goanh/, (msg) => {
+        const group = msg.chat.id;
+        settings[group].camanh = false;
+
+        bot.sendMessage(
+          group,
+          terminalUI("> IMAGE BLOCKING: DISABLED"),
+          { parse_mode: "HTML" }
+        );
+      });
+
+      bot.onText(/\/camfile/, (msg) => {
+        const group = msg.chat.id;
+        if (!isAdmin(group, msg.from.id)) return;
+        settings[group].camfile = true;
+
+        bot.sendMessage(
+          group,
+          terminalUI("> FILE BLOCKING: ENABLED"),
+          { parse_mode: "HTML" }
+        );
+      });
+
+      bot.onText(/\/gofile/, (msg) => {
+        const group = msg.chat.id;
+        settings[group].camfile = false;
+
+        bot.sendMessage(
+          group,
+          terminalUI("> FILE BLOCKING: DISABLED"),
+          { parse_mode: "HTML" }
+        );
+      });
+// ==========================================
+// HACKER OMEGA MODE — PART 4/4
+// ==========================================
+
+// ======================================================
+// SYSTEM DASHBOARD
+// ======================================================
+      bot.onText(/\/system/, (msg) => {
+        if (!isAdmin(msg.chat.id, msg.from.id)) return;
+
+        const group = msg.chat.id;
+
+        const blockedUsers =
+          Object.entries(warns[group] || {})
+            .filter(([_, lvl]) => lvl >= 1)
+            .map(([id]) => id)
+            .join(", ") || "None";
+
+        bot.sendMessage(
+          msg.chat.id,
+          terminalUI(`
+SYSTEM DASHBOARD
+--------------------------
+Admins: ${esc(JSON.stringify(admins[group] || []))}
+Ghost Mode: ${ghostMode ? "ON" : "OFF"}
+Blocked Users: ${blockedUsers}
+Security Events Logged: ${securityLog.length}
+Firewall: ENABLED
+Threat Engine: ACTIVE
+Fingerprint: ENABLED
+--------------------------
+BOT STATUS: OPTIMAL
+`),
           { parse_mode: "HTML" }
         );
       });
@@ -481,54 +609,27 @@ ${matrixEffect}`),
         if (securityLog.length === 0) {
           return bot.sendMessage(
             msg.chat.id,
-            terminalUI("> LOG IS EMPTY"),
+            terminalUI("> SECURITY LOG EMPTY"),
             { parse_mode: "HTML" }
           );
         }
 
-        let logTxt = securityLog
+        let txt = securityLog
           .map(
             (e) =>
-              `${e.time} | ${e.event} | USER: ${e.user || "?"} | LVL: ${
+              `${e.time} | ${e.event} | USER: ${e.user || "-"} | LVL: ${
                 e.level || "-"
               } | ${e.reason || ""}`
           )
           .join("\n");
 
-        bot.sendMessage(msg.chat.id, `<pre>${logTxt}</pre>`, {
+        bot.sendMessage(msg.chat.id, `<pre>${esc(txt)}</pre>`, {
           parse_mode: "HTML",
         });
       });
 
 // ======================================================
-// SYSTEM DASHBOARD
-// ======================================================
-      bot.onText(/\/system/, (msg) => {
-        if (!isAdmin(msg.chat.id, msg.from.id)) return;
-
-        bot.sendMessage(
-          msg.chat.id,
-          terminalUI(`
-> SYSTEM DASHBOARD
-Admins: ${JSON.stringify(admins[msg.chat.id] || [])}
-Ghost Mode: ${ghostMode ? "ON" : "OFF"}
-Blocked Users: ${
-            Object.entries(warns[msg.chat.id] || {})
-              .filter(([_, lvl]) => lvl >= 1)
-              .map(([id]) => id)
-              .join(", ") || "None"
-          }
-Log Size: ${securityLog.length}
-Threat Engine: ACTIVE
-Firewall: ENABLED
-Fingerprint: ACTIVE
-`),
-          { parse_mode: "HTML" }
-        );
-      });
-
-// ======================================================
-// GHOST MODE
+// GHOST MODE (INVISIBLE BOT)
 // ======================================================
       bot.onText(/\/ghost (.+)/, (msg, match) => {
         if (msg.from.id !== MAIN_ADMIN) return;
@@ -546,61 +647,11 @@ Fingerprint: ACTIVE
       });
 
 // ======================================================
-// SETTINGS COMMANDS
-// ======================================================
-      bot.onText(/\/camlink/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camlink = true;
-        bot.sendMessage(group, terminalUI("> LINK BLOCKED"), { parse_mode: "HTML" });
-      });
-
-      bot.onText(/\/golink/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camlink = false;
-        bot.sendMessage(group, terminalUI("> LINK ALLOWED"), { parse_mode: "HTML" });
-      });
-
-      bot.onText(/\/camanh/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camanh = true;
-        bot.sendMessage(group, terminalUI("> IMAGE BLOCKED"), {
-          parse_mode: "HTML",
-        });
-      });
-
-      bot.onText(/\/goanh/, (msg) => {
-        const group = msg.chat.id;
-        settings[group].camanh = false;
-        bot.sendMessage(group, terminalUI("> IMAGE ALLOWED"), {
-          parse_mode: "HTML",
-        });
-      });
-
-      bot.onText(/\/camfile/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camfile = true;
-        bot.sendMessage(group, terminalUI("> FILE BLOCKED"), {
-          parse_mode: "HTML",
-        });
-      });
-
-      bot.onText(/\/gofile/, (msg) => {
-        const group = msg.chat.id;
-        settings[group].camfile = false;
-        bot.sendMessage(group, terminalUI("> FILE ALLOWED"), {
-          parse_mode: "HTML",
-        });
-      });
-
-// ======================================================
 // PROCESS TELEGRAM UPDATE
 // ======================================================
     }
 
+    // If webhook sends update, process it
     if (event.body) {
       const update = JSON.parse(event.body);
       await bot.processUpdate(update);
@@ -613,9 +664,13 @@ Fingerprint: ACTIVE
 
   } catch (err) {
     console.error("BOT ERROR:", err);
+
     return {
       statusCode: 500,
-      body: JSON.stringify({ ok: false, error: err.message }),
+      body: JSON.stringify({
+        ok: false,
+        error: err.message,
+      }),
     };
   }
 };
