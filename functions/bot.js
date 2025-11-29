@@ -28,16 +28,10 @@ function timeStamp() {
 
 // ==========================================
 // FIX HTML — ESCAPE "<" & ">"
-//
-// This prevents Telegram from crashing when
-// text contains: <id>, <user>, <123>
 // ==========================================
 function esc(s) {
   if (!s) return "";
-  return s
-    .toString()
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // ==========================================
@@ -52,7 +46,7 @@ const matrixEffect = `
 `;
 
 // ==========================================
-// TERMINAL UI (auto escape)
+// TERMINAL UI
 // ==========================================
 const terminalUI = (txt) =>
 `<pre>
@@ -64,7 +58,7 @@ BOT STATUS: ACTIVE
 </pre>`;
 
 // ==========================================
-// RED ALERT UI (auto escape)
+// RED ALERT UI
 // ==========================================
 const redAlertUI = (txt) =>
 `<pre>
@@ -76,7 +70,7 @@ ${matrixEffect}
 </pre>`;
 
 // ==========================================
-// CYBER AVATAR GENERATOR
+// CYBER AVATAR
 // ==========================================
 function cyberAvatar() {
   const list = [
@@ -92,7 +86,7 @@ function cyberAvatar() {
 }
 
 // ==========================================
-// IS ADMIN CHECK
+// ADMIN CHECK
 // ==========================================
 function isAdmin(group, user) {
   if (user === MAIN_ADMIN) return true;
@@ -116,9 +110,7 @@ export const handler = async (event) => {
       bot = new TelegramBot(process.env.BOT_TOKEN, { webHook: true });
       console.log("BOT OMEGA MODE INITIALIZED");
 
-      // ======================================================
-      // AUTO ADMIN WHEN BOT IS ADDED TO GROUP
-      // ======================================================
+      // ========== AUTO ADMIN ==========
       bot.on("new_chat_members", (msg) => {
         const group = msg.chat.id;
 
@@ -136,119 +128,107 @@ export const handler = async (event) => {
 
             bot.sendMessage(
               group,
-              terminalUI(`> NEW ADMIN REGISTERED: ${msg.from.id}\n> ACCESS: GRANTED`),
+              terminalUI(`> NEW ADMIN: ${msg.from.id}\n> ACCESS: GRANTED`),
               { parse_mode: "HTML" }
             );
           }
         });
       });
 
-      // ======================================================
-      // MESSAGE HANDLER (MAIN ENGINE)
-      // ======================================================
+      // ========== MESSAGE HANDLER ==========
       bot.on("message", async (msg) => {
         const user = msg.from.id;
         const chat = msg.chat.id;
         const type = msg.chat.type;
 
-        // -----------------------------------------------
-        // PRIVATE CHAT RESTRICTION (except MAIN_ADMIN)
-        // -----------------------------------------------
+        // === PRIVATE CHAT LOCK ===
         if (type === "private" && user !== MAIN_ADMIN) {
           return bot.sendMessage(
             user,
-            terminalUI("> ACCESS DENIED\n> PRIVATE MODE DISABLED"),
+            terminalUI("> ACCESS DENIED — PRIVATE MODE OFF"),
             { parse_mode: "HTML" }
           );
         }
 
-        // -----------------------------------------------
-        // GHOST MODE — bot becomes INVISIBLE
-        // -----------------------------------------------
-        if (ghostMode && user !== MAIN_ADMIN) {
-          logEvent({ event: "GHOST_CAPTURE", user, group: chat });
-          return; // do NOT respond
+        // === GHOST MODE ===
+        if (ghostMode && user !== MAIN_ADMIN) return;
+
+        // === INIT GROUP SETTINGS ===
+        if (!settings[chat]) {
+          settings[chat] = {
+            camlink: false,
+            camanh: false,
+            camfile: false,
+            time: 0
+          };
         }
 
-        // -----------------------------------------------
-        // GROUP PROTECTION ACTIVE
-        // -----------------------------------------------
-        if (type !== "private") {
-          if (!settings[chat]) {
-            settings[chat] = {
-              camlink: false,
-              camanh: false,
-              camfile: false,
-            };
-          }
+        // === CUSTOM /time LIMIT ===
+        if (!msgSpeed[user]) msgSpeed[user] = { last_custom: 0 };
 
-          // ================================
-          // SPEED SPAM DETECTOR
-          // ================================
-          if (!msgSpeed[user]) msgSpeed[user] = { count: 0, last: 0 };
+        if (settings[chat].time && !isAdmin(chat, user)) {
           const now = Date.now();
 
-          if (now - msgSpeed[user].last < 500) {
-            msgSpeed[user].count++;
-          } else {
-            msgSpeed[user].count = 1;
-          }
-          msgSpeed[user].last = now;
-
-          if (msgSpeed[user].count >= 4 && !isAdmin(chat, user)) {
-            return warnSystem(msg, user, chat, "SPEED_SPAM");
+          if (now - msgSpeed[user].last_custom < settings[chat].time) {
+            return warnSystem(msg, user, chat, "TIME_LIMIT");
           }
 
-          // ================================
-          // PATTERN SPAM DETECTOR (aaaaaa, !!!!!)
-          // ================================
-          if (msg.text && /(.)\1{6,}/.test(msg.text) && !isAdmin(chat, user)) {
-            return warnSystem(msg, user, chat, "PATTERN_SPAM");
-          }
+          msgSpeed[user].last_custom = now;
+        }
 
-          // ================================
-          // SHADOW LINK DETECTOR (hxxp, h*t*t*p)
-          // ================================
-          if (
-            msg.text &&
-            /(hxxp|h\.t\.t\.p|h\*ttp|h_t_t_p)/i.test(msg.text) &&
-            !isAdmin(chat, user)
-          ) {
-            return warnSystem(msg, user, chat, "SHADOW_LINK");
-          }
+        // === SPEED SPAM DETECTOR ===
+        if (!msgSpeed[user].speed) msgSpeed[user].speed = { count: 0, last: 0 };
 
-          // ================================
-          // NORMAL LINK BLOCKER
-          // ================================
-          if (
-            settings[chat].camlink &&
-            msg.text &&
-            /(http|https)/.test(msg.text)
-          ) {
-            if (!isAdmin(chat, user)) {
-              return warnSystem(msg, user, chat, "LINK_BLOCK");
-            }
-          }
+        const now2 = Date.now();
+        if (now2 - msgSpeed[user].speed.last < 500) {
+          msgSpeed[user].speed.count++;
+        } else {
+          msgSpeed[user].speed.count = 1;
+        }
+        msgSpeed[user].speed.last = now2;
 
-          // ================================
-          // BLOCK IMAGES
-          // ================================
-          if (settings[chat].camanh && msg.photo && !isAdmin(chat, user)) {
-            return warnSystem(msg, user, chat, "IMAGE_BLOCK");
-          }
+        if (msgSpeed[user].speed.count >= 4 && !isAdmin(chat, user)) {
+          return warnSystem(msg, user, chat, "SPEED_SPAM");
+        }
 
-          // ================================
-          // BLOCK FILES
-          // ================================
-          if (settings[chat].camfile && msg.document && !isAdmin(chat, user)) {
-            return warnSystem(msg, user, chat, "FILE_BLOCK");
-          }
+        // === PATTERN SPAM ===
+        if (msg.text && /(.)\1{6,}/.test(msg.text) && !isAdmin(chat, user)) {
+          return warnSystem(msg, user, chat, "PATTERN_SPAM");
+        }
+
+        // === SHADOW LINK ===
+        if (
+          msg.text &&
+          /(hxxp|h\.t\.t\.p|h\*ttp|h_t_t_p)/i.test(msg.text) &&
+          !isAdmin(chat, user)
+        ) {
+          return warnSystem(msg, user, chat, "SHADOW_LINK");
+        }
+
+        // === BLOCK LINK ===
+        if (
+          settings[chat].camlink &&
+          msg.text &&
+          /(http|https)/.test(msg.text) &&
+          !isAdmin(chat, user)
+        ) {
+          return warnSystem(msg, user, chat, "LINK_BLOCK");
+        }
+
+        // === BLOCK IMAGE ===
+        if (settings[chat].camanh && msg.photo && !isAdmin(chat, user)) {
+          return warnSystem(msg, user, chat, "IMAGE_BLOCK");
+        }
+
+        // === BLOCK FILE ===
+        if (settings[chat].camfile && msg.document && !isAdmin(chat, user)) {
+          return warnSystem(msg, user, chat, "FILE_BLOCK");
         }
       });
 
-      // ======================================================
-      // THREAT & WARNING SYSTEM
-      // ======================================================
+      // ==========================================
+      // WARNING SYSTEM
+      // ==========================================
       async function warnSystem(msg, user, group, reason) {
         if (!warns[group]) warns[group] = {};
         warns[group][user] = (warns[group][user] || 0) + 1;
@@ -270,26 +250,19 @@ export const handler = async (event) => {
           3: 120 * 60,
         };
 
-        // ================================
-        // CRITICAL THREAT (LEVEL 4)
-        // ================================
         if (level >= 4) {
           await bot.kickChatMember(group, user);
-
           return bot.sendMessage(
             group,
             redAlertUI(`
 CRITICAL THREAT NEUTRALIZED
 USER: ${user}
-CLASS: OMEGA LVL 4
+LEVEL: 4
 ${matrixEffect}`),
             { parse_mode: "HTML" }
           );
         }
 
-        // ================================
-        // TEMP BAN — MUTED
-        // ================================
         await bot.restrictChatMember(group, user, {
           permissions: { can_send_messages: false },
           until_date: Math.floor(Date.now() / 1000) + durations[level],
@@ -301,376 +274,291 @@ ${matrixEffect}`),
 THREAT LEVEL: ${level}/4
 REASON: ${reason}
 USER: ${user}
-TEMP BAN: ${durations[level] / 60} MINUTES
+MUTED: ${durations[level] / 60} minutes
 AVATAR: ${cyberAvatar()}
 `),
           { parse_mode: "HTML" }
         );
       }
 
-      // ======================================================
-      // HELP MENU
-      // ======================================================
-      bot.onText(/\/help/, (msg) => {
-        bot.sendMessage(
-          msg.chat.id,
-          terminalUI(`
-AVAILABLE COMMANDS:
-/help
-/idnhom
-/iduser (reply)
+      // ==========================================
+      // /time <seconds>
+// ==========================================
+bot.onText(/\/time(?: (.+))?/, (msg, match) => {
+  const group = msg.chat.id;
+  const user = msg.from.id;
 
-/ADMIN:
-/addadmin <id>
-/kickadmin <id>
-/kick <id|reply>
+  if (!isAdmin(group, user)) {
+    return bot.sendMessage(
+      group,
+      terminalUI("> ACCESS DENIED"),
+      { parse_mode: "HTML" }
+    );
+  }
 
-/UNBAN:
-/unmutes <id|reply>
+  const value = match[1] ? Number(match[1]) : null;
 
-/SECURITY:
-/camlink /golink
-/camanh  /goanh
-/camfile /gofile
+  if (!value || isNaN(value) || value < 1) {
+    return bot.sendMessage(
+      group,
+      terminalUI("USAGE:\n/time <seconds>\nEXAMPLE:\n/time 10"),
+      { parse_mode: "HTML" }
+    );
+  }
 
-/ANTISPAM:
-/time <seconds>
+  settings[group].time = value * 1000;
 
-/SYSTEM:
-/log
-/system
-/ghost on|off
-`),
-          { parse_mode: "HTML" }
-        );
-      });
+  bot.sendMessage(
+    group,
+    terminalUI(`ANTI-SPAM DELAY SET TO: ${value} seconds`),
+    { parse_mode: "HTML" }
+  );
+});
 // ==========================================
 // HACKER OMEGA MODE — PART 3/4
 // ==========================================
 
-// ======================================================
-// UNMUTES (REMOVE MUTE IMMEDIATELY)
-// ======================================================
-      bot.onText(/\/unmutes(?: (.+))?/, async (msg, match) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
+// ========== /unmutes ==========
+bot.onText(/\/unmutes(?: (.+))?/, async (msg, match) => {
+  const group = msg.chat.id;
+  if (!isAdmin(group, msg.from.id)) return;
 
-        let id = null;
+  let id = null;
 
-        if (msg.reply_to_message) {
-          id = msg.reply_to_message.from.id;
-        } else if (match[1]) {
-          id = Number(match[1].replace("@", ""));
-        }
+  if (msg.reply_to_message) id = msg.reply_to_message.from.id;
+  else if (match[1]) id = Number(match[1].replace("@", ""));
 
-        if (!id) {
-          return bot.sendMessage(
-            group,
-            terminalUI("> ERROR: NO TARGET FOUND"),
-            { parse_mode: "HTML" }
-          );
-        }
+  if (!id) {
+    return bot.sendMessage(group, terminalUI("> ERROR: NO USER"), {
+      parse_mode: "HTML",
+    });
+  }
 
-        try {
-          await bot.restrictChatMember(group, id, {
-            permissions: {
-              can_send_messages: true,
-              can_send_media_messages: true,
-              can_send_other_messages: true,
-              can_add_web_page_previews: true,
-            },
-            until_date: 0,
-          });
+  try {
+    await bot.restrictChatMember(group, id, {
+      permissions: {
+        can_send_messages: true,
+        can_send_media_messages: true,
+        can_send_other_messages: true,
+        can_add_web_page_previews: true,
+      },
+      until_date: 0,
+    });
 
-          bot.sendMessage(
-            group,
-            terminalUI(`> USER UNMUTED: ${id}\n> STATUS: SUCCESS`),
-            { parse_mode: "HTML" }
-          );
-        } catch {
-          bot.sendMessage(
-            group,
-            terminalUI(`> USER UNMUTED: ${id}\n> STATUS: FAILED`),
-            { parse_mode: "HTML" }
-          );
-        }
-      });
+    bot.sendMessage(group, terminalUI(`> USER UNMUTED: ${id}`), {
+      parse_mode: "HTML",
+    });
+  } catch {
+    bot.sendMessage(group, terminalUI("> FAILED"), { parse_mode: "HTML" });
+  }
+});
 
-// ======================================================
-// KICK USER
-// ======================================================
-      bot.onText(/\/kick (.+)/, async (msg, match) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
+// ========== /kick ==========
+bot.onText(/\/kick (.+)/, async (msg, match) => {
+  const group = msg.chat.id;
+  if (!isAdmin(group, msg.from.id)) return;
 
-        const id = match[1].replace("@", "");
+  const id = match[1].replace("@", "");
 
-        try {
-          await bot.kickChatMember(group, id);
+  try {
+    await bot.kickChatMember(group, id);
 
-          logEvent({
-            event: "KICK",
-            user: id,
-            group,
-            by: msg.from.id,
-          });
+    bot.sendMessage(group, terminalUI(`> USER KICKED: ${id}`), {
+      parse_mode: "HTML",
+    });
+  } catch {
+    bot.sendMessage(group, terminalUI("> KICK FAILED"), {
+      parse_mode: "HTML",
+    });
+  }
+});
 
-          bot.sendMessage(group, terminalUI(`> KICKED USER: ${id}`), {
-            parse_mode: "HTML",
-          });
-        } catch {
-          bot.sendMessage(group, terminalUI("> KICK FAILED"), {
-            parse_mode: "HTML",
-          });
-        }
-      });
+// ========== /addadmin ==========
+bot.onText(/\/addadmin (.+)/, (msg, match) => {
+  const group = msg.chat.id;
+  if (!isAdmin(group, msg.from.id)) return;
 
-// ======================================================
-// ADD ADMIN
-// ======================================================
-      bot.onText(/\/addadmin (.+)/, (msg, match) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
+  const id = Number(match[1].replace("@", ""));
 
-        const id = Number(match[1].replace("@", ""));
+  if (!admins[group]) admins[group] = [];
+  if (!admins[group].includes(id)) admins[group].push(id);
 
-        if (!admins[group]) admins[group] = [];
-        if (!admins[group].includes(id)) admins[group].push(id);
+  bot.sendMessage(group, terminalUI(`> NEW ADMIN: ${id}`), {
+    parse_mode: "HTML",
+  });
+});
 
-        logEvent({
-          event: "ADD_ADMIN",
-          admin: id,
-          by: msg.from.id,
-          group,
-        });
+// ========== /kickadmin ==========
+bot.onText(/\/kickadmin (.+)/, (msg, match) => {
+  const group = msg.chat.id;
+  if (!isAdmin(group, msg.from.id)) return;
 
-        bot.sendMessage(group, terminalUI(`> NEW ADMIN ADDED: ${id}`), {
-          parse_mode: "HTML",
-        });
-      });
+  const id = Number(match[1].replace("@", ""));
+  admins[group] = admins[group]?.filter((x) => x !== id);
 
-// ======================================================
-// REMOVE ADMIN
-// ======================================================
-      bot.onText(/\/kickadmin (.+)/, (msg, match) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
+  bot.sendMessage(group, terminalUI(`> ADMIN REMOVED: ${id}`), {
+    parse_mode: "HTML",
+  });
+});
 
-        const id = Number(match[1].replace("@", ""));
-        admins[group] = admins[group]?.filter((x) => x !== id);
+// ========== id commands ==========
+bot.onText(/\/idnhom/, (msg) => {
+  bot.sendMessage(msg.chat.id, terminalUI(`GROUP ID: ${msg.chat.id}`), {
+    parse_mode: "HTML",
+  });
+});
 
-        logEvent({
-          event: "REMOVE_ADMIN",
-          admin: id,
-          by: msg.from.id,
-        });
+bot.onText(/\/iduser/, (msg) => {
+  const id = msg.reply_to_message?.from.id;
 
-        bot.sendMessage(group, terminalUI(`> ADMIN REMOVED: ${id}`), {
-          parse_mode: "HTML",
-        });
-      });
+  bot.sendMessage(msg.chat.id, terminalUI(`USER ID: ${id}`), {
+    parse_mode: "HTML",
+  });
+});
 
-// ======================================================
-// ID COMMANDS
-// ======================================================
-      bot.onText(/\/idnhom/, (msg) => {
-        bot.sendMessage(
-          msg.chat.id,
-          terminalUI(`> GROUP ID: ${msg.chat.id}`),
-          { parse_mode: "HTML" }
-        );
-      });
+// ========== Security Toggles ==========
+bot.onText(/\/camlink/, (msg) => {
+  if (!isAdmin(msg.chat.id, msg.from.id)) return;
+  settings[msg.chat.id].camlink = true;
 
-      bot.onText(/\/iduser/, (msg) => {
-        const id = msg.reply_to_message?.from.id;
+  bot.sendMessage(msg.chat.id, terminalUI("> LINK BLOCKING ENABLED"), {
+    parse_mode: "HTML",
+  });
+});
 
-        bot.sendMessage(
-          msg.chat.id,
-          terminalUI(`> USER ID: ${id}`),
-          { parse_mode: "HTML" }
-        );
-      });
+bot.onText(/\/golink/, (msg) => {
+  if (!isAdmin(msg.chat.id, msg.from.id)) return;
+  settings[msg.chat.id].camlink = false;
 
-// ======================================================
-// SECURITY TOGGLES
-// ======================================================
-      bot.onText(/\/camlink/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camlink = true;
+  bot.sendMessage(msg.chat.id, terminalUI("> LINK BLOCKING DISABLED"), {
+    parse_mode: "HTML",
+  });
+});
 
-        bot.sendMessage(
-          group,
-          terminalUI("> LINK BLOCKING: ENABLED"),
-          { parse_mode: "HTML" }
-        );
-      });
+bot.onText(/\/camanh/, (msg) => {
+  if (!isAdmin(msg.chat.id, msg.from.id)) return;
+  settings[msg.chat.id].camanh = true;
 
-      bot.onText(/\/golink/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camlink = false;
+  bot.sendMessage(msg.chat.id, terminalUI("> IMAGE BLOCKING ENABLED"), {
+    parse_mode: "HTML",
+  });
+});
 
-        bot.sendMessage(
-          group,
-          terminalUI("> LINK BLOCKING: DISABLED"),
-          { parse_mode: "HTML" }
-        );
-      });
+bot.onText(/\/goanh/, (msg) => {
+  settings[msg.chat.id].camanh = false;
 
-      bot.onText(/\/camanh/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camanh = true;
+  bot.sendMessage(msg.chat.id, terminalUI("> IMAGE BLOCKING DISABLED"), {
+    parse_mode: "HTML",
+  });
+});
 
-        bot.sendMessage(
-          group,
-          terminalUI("> IMAGE BLOCKING: ENABLED"),
-          { parse_mode: "HTML" }
-        );
-      });
+bot.onText(/\/camfile/, (msg) => {
+  if (!isAdmin(msg.chat.id, msg.from.id)) return;
+  settings[msg.chat.id].camfile = true;
 
-      bot.onText(/\/goanh/, (msg) => {
-        const group = msg.chat.id;
-        settings[group].camanh = false;
+  bot.sendMessage(msg.chat.id, terminalUI("> FILE BLOCKING ENABLED"), {
+    parse_mode: "HTML",
+  });
+});
 
-        bot.sendMessage(
-          group,
-          terminalUI("> IMAGE BLOCKING: DISABLED"),
-          { parse_mode: "HTML" }
-        );
-      });
+bot.onText(/\/gofile/, (msg) => {
+  settings[msg.chat.id].camfile = false;
 
-      bot.onText(/\/camfile/, (msg) => {
-        const group = msg.chat.id;
-        if (!isAdmin(group, msg.from.id)) return;
-        settings[group].camfile = true;
-
-        bot.sendMessage(
-          group,
-          terminalUI("> FILE BLOCKING: ENABLED"),
-          { parse_mode: "HTML" }
-        );
-      });
-
-      bot.onText(/\/gofile/, (msg) => {
-        const group = msg.chat.id;
-        settings[group].camfile = false;
-
-        bot.sendMessage(
-          group,
-          terminalUI("> FILE BLOCKING: DISABLED"),
-          { parse_mode: "HTML" }
-        );
-      });
+  bot.sendMessage(msg.chat.id, terminalUI("> FILE BLOCKING DISABLED"), {
+    parse_mode: "HTML",
+  });
+});
 // ==========================================
 // HACKER OMEGA MODE — PART 4/4
 // ==========================================
 
-// ======================================================
-// SYSTEM DASHBOARD
-// ======================================================
-      bot.onText(/\/system/, (msg) => {
-        if (!isAdmin(msg.chat.id, msg.from.id)) return;
+// ========== /system (dashboard) ==========
+bot.onText(/\/system/, (msg) => {
+  if (!isAdmin(msg.chat.id, msg.from.id)) return;
 
-        const group = msg.chat.id;
+  const group = msg.chat.id;
+  const blocked =
+    Object.entries(warns[group] || {})
+      .filter(([_, lvl]) => lvl >= 1)
+      .map(([id]) => id)
+      .join(", ") || "None";
 
-        const blockedUsers =
-          Object.entries(warns[group] || {})
-            .filter(([_, lvl]) => lvl >= 1)
-            .map(([id]) => id)
-            .join(", ") || "None";
-
-        bot.sendMessage(
-          msg.chat.id,
-          terminalUI(`
+  bot.sendMessage(
+    msg.chat.id,
+    terminalUI(`
 SYSTEM DASHBOARD
---------------------------
 Admins: ${esc(JSON.stringify(admins[group] || []))}
 Ghost Mode: ${ghostMode ? "ON" : "OFF"}
-Blocked Users: ${blockedUsers}
-Security Events Logged: ${securityLog.length}
-Firewall: ENABLED
-Threat Engine: ACTIVE
-Fingerprint: ENABLED
---------------------------
-BOT STATUS: OPTIMAL
-`),
-          { parse_mode: "HTML" }
-        );
-      });
+Blocked Users: ${blocked}
+Log Size: ${securityLog.length}
+Firewall: ACTIVE
+Threat Engine: ONLINE
+    `),
+    { parse_mode: "HTML" }
+  );
+});
 
-// ======================================================
-// SECURITY LOG VIEWER
-// ======================================================
-      bot.onText(/\/log/, (msg) => {
-        if (msg.from.id !== MAIN_ADMIN) return;
+// ========== /log (security log) ==========
+bot.onText(/\/log/, (msg) => {
+  if (msg.from.id !== MAIN_ADMIN) return;
 
-        if (securityLog.length === 0) {
-          return bot.sendMessage(
-            msg.chat.id,
-            terminalUI("> SECURITY LOG EMPTY"),
-            { parse_mode: "HTML" }
-          );
-        }
-
-        let txt = securityLog
-          .map(
-            (e) =>
-              `${e.time} | ${e.event} | USER: ${e.user || "-"} | LVL: ${
-                e.level || "-"
-              } | ${e.reason || ""}`
-          )
-          .join("\n");
-
-        bot.sendMessage(msg.chat.id, `<pre>${esc(txt)}</pre>`, {
-          parse_mode: "HTML",
-        });
-      });
-
-// ======================================================
-// GHOST MODE (INVISIBLE BOT)
-// ======================================================
-      bot.onText(/\/ghost (.+)/, (msg, match) => {
-        if (msg.from.id !== MAIN_ADMIN) return;
-
-        const mode = match[1];
-
-        if (mode === "on") ghostMode = true;
-        if (mode === "off") ghostMode = false;
-
-        bot.sendMessage(
-          msg.chat.id,
-          terminalUI(`> GHOST MODE: ${ghostMode ? "ENABLED" : "DISABLED"}`),
-          { parse_mode: "HTML" }
-        );
-      });
-
-// ======================================================
-// PROCESS TELEGRAM UPDATE
-// ======================================================
-    }
-
-    // If webhook sends update, process it
-    if (event.body) {
-      const update = JSON.parse(event.body);
-      await bot.processUpdate(update);
-    }
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true }),
-    };
-
-  } catch (err) {
-    console.error("BOT ERROR:", err);
-
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        ok: false,
-        error: err.message,
-      }),
-    };
+  if (securityLog.length === 0) {
+    return bot.sendMessage(msg.chat.id, terminalUI("> LOG EMPTY"), {
+      parse_mode: "HTML",
+    });
   }
+
+  const txt = securityLog
+    .map(
+      (e) =>
+        `${e.time} | ${e.event} | USER: ${e.user || "-"} | LVL: ${
+          e.level || "-"
+        } | ${e.reason || ""}`
+    )
+    .join("\n");
+
+  bot.sendMessage(msg.chat.id, `<pre>${esc(txt)}</pre>`, {
+    parse_mode: "HTML",
+  });
+});
+
+// ========== /ghost on|off ==========
+bot.onText(/\/ghost (.+)/, (msg, match) => {
+  if (msg.from.id !== MAIN_ADMIN) return;
+
+  ghostMode = match[1] === "on";
+
+  bot.sendMessage(
+    msg.chat.id,
+    terminalUI(`> GHOST MODE: ${ghostMode ? "ENABLED" : "DISABLED"}`),
+    { parse_mode: "HTML" }
+  );
+});
+
+// ==========================================
+// FINAL TELEGRAM UPDATE PROCESSOR
+// ==========================================
+}
+
+if (event.body) {
+  const update = JSON.parse(event.body);
+  await bot.processUpdate(update);
+}
+
+return {
+  statusCode: 200,
+  body: JSON.stringify({ ok: true }),
+};
+
+} catch (err) {
+  console.error("BOT ERROR:", err);
+
+  return {
+    statusCode: 500,
+    body: JSON.stringify({
+      ok: false,
+      error: err.message,
+    }),
+  };
+}
 };
